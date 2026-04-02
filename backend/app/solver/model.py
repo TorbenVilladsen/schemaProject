@@ -14,6 +14,8 @@ class TeacherData:
     max_hours_day: int
     qualified_subjects: dict[uuid.UUID, tuple[int, int]] = field(default_factory=dict)
     # subject_id -> (min_grade, max_grade)
+    availability: dict[tuple[int, int], bool] = field(default_factory=dict)
+    # (day_of_week, period_idx) -> is_available; absent keys default to True
 
 
 @dataclass
@@ -23,6 +25,15 @@ class SubjectData:
     grade_level: int
     hours_per_week: int
     requires_room_type: str | None
+    class_id: uuid.UUID | None = None
+
+
+@dataclass
+class ClassData:
+    id: uuid.UUID
+    name: str
+    grade_level: int
+    contact_teacher_id: uuid.UUID | None = None
 
 
 @dataclass
@@ -45,6 +56,7 @@ class SolverInput:
     subjects: list[SubjectData]
     rooms: list[RoomData]
     timeslots: list[TimeslotData]
+    classes: list[ClassData] = field(default_factory=list)
     days: list[int] = field(default_factory=lambda: [0, 1, 2, 3, 4])  # Mon-Fri
 
 
@@ -58,6 +70,7 @@ class SolverResult:
 def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult:
     """Build and solve the CP-SAT model for schedule generation."""
     model = cp_model.CpModel()
+    total_required_hours = sum(subject.hours_per_week for subject in data.subjects)
 
     # Pre-compute which teachers can teach which subjects
     # A teacher can teach a subject if they have a qualification matching the subject's grade
@@ -74,15 +87,19 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
     for s_idx, subject in enumerate(data.subjects):
         compatible = []
         for r_idx, room in enumerate(data.rooms):
-            if subject.requires_room_type is None or room.room_type == subject.requires_room_type:
+            if subject.requires_room_type is None or room.room_type.lower() == subject.requires_room_type.lower():
                 compatible.append(r_idx)
         subject_rooms[s_idx] = compatible
 
     # Decision variables: x[t, s, d, p] = 1 iff teacher t teaches subject s on day d, period p
+    # Skip variables where teacher is unavailable (prune at creation time)
     x: dict[tuple[int, int, int, int], cp_model.IntVar] = {}
     for t_idx, s_idx in teacher_subject_pairs:
+        teacher = data.teachers[t_idx]
         for d in data.days:
             for p_idx in range(len(data.timeslots)):
+                if not teacher.availability.get((d, p_idx), True):
+                    continue  # teacher unavailable — no variable
                 var_name = f"x_t{t_idx}_s{s_idx}_d{d}_p{p_idx}"
                 x[t_idx, s_idx, d, p_idx] = model.new_bool_var(var_name)
 
@@ -166,6 +183,54 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
                     # sum of rooms == sum of teachers (0 or 1)
                     model.add(sum(room_vars) == sum(teaching_vars))
 
+    # 6. Teacher max hours per day
+    for t_idx, teacher in enumerate(data.teachers):
+        for d in data.days:
+            day_vars = [
+                x[t_idx, s_idx, d, p_idx]
+                for s_idx in range(len(data.subjects))
+                for p_idx in range(len(data.timeslots))
+                if (t_idx, s_idx, d, p_idx) in x
+            ]
+            if day_vars:
+                model.add(sum(day_vars) <= teacher.max_hours_day)
+
+    # 7. Teacher max hours per week
+    for t_idx, teacher in enumerate(data.teachers):
+        week_vars = [
+            x[t_idx, s_idx, d, p_idx]
+            for s_idx in range(len(data.subjects))
+            for d in data.days
+            for p_idx in range(len(data.timeslots))
+            if (t_idx, s_idx, d, p_idx) in x
+        ]
+        if week_vars:
+            model.add(sum(week_vars) <= teacher.max_hours_week)
+
+    # 8. Balance load across weekdays.
+    # Without an objective, CP-SAT may cluster assignments on just a few days.
+    day_load_vars: list[cp_model.IntVar] = []
+    for d in data.days:
+        day_vars = [
+            x[t_idx, s_idx, d, p_idx]
+            for t_idx in range(len(data.teachers))
+            for s_idx in range(len(data.subjects))
+            for p_idx in range(len(data.timeslots))
+            if (t_idx, s_idx, d, p_idx) in x
+        ]
+        day_load = model.new_int_var(0, total_required_hours, f"day_load_d{d}")
+        if day_vars:
+            model.add(day_load == sum(day_vars))
+        else:
+            model.add(day_load == 0)
+        day_load_vars.append(day_load)
+
+    if day_load_vars:
+        max_day_load = model.new_int_var(0, total_required_hours, "max_day_load")
+        for day_load in day_load_vars:
+            model.add(day_load <= max_day_load)
+        model.minimize(max_day_load)
+
     # --- SOLVE ---
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit_seconds
@@ -189,6 +254,7 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
                     "room_id": room_id,
                     "day_of_week": d,
                     "timeslot_id": data.timeslots[p_idx].id,
+                    "class_id": data.subjects[s_idx].class_id,
                 })
 
         return SolverResult(
@@ -197,6 +263,7 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
             stats={
                 "wall_time": solver.wall_time,
                 "num_entries": len(entries),
+                "objective_value": solver.objective_value,
             },
         )
     else:

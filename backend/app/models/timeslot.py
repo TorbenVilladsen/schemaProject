@@ -19,3 +19,4 @@ class Timeslot(Base):
     start_time: Mapped[time] = mapped_column(Time)
     end_time: Mapped[time] = mapped_column(Time)
     label: Mapped[str | None] = mapped_column(String(50))
+    period_type: Mapped[str] = mapped_column(String(20), default="module")  # "reading" or "module"

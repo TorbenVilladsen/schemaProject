@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { getSchedules, createSchedule, generateSchedule, deleteSchedule } from "../api/client";
 
 export default function Schedules() {
@@ -10,6 +11,7 @@ export default function Schedules() {
 
   const [name, setName] = useState("");
   const [generating, setGenerating] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const createMut = useMutation({
     mutationFn: createSchedule,
@@ -26,13 +28,19 @@ export default function Schedules() {
 
   const handleGenerate = async (id: string) => {
     setGenerating(id);
+    setError(null);
     try {
       await generateSchedule(id);
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
       navigate(`/schedules/${id}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Generation failed";
-      alert(msg);
+      let msg = "Generation failed";
+      if (axios.isAxiosError(err) && err.response?.data?.detail) {
+        msg = err.response.data.detail;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setError(msg);
     } finally {
       setGenerating(null);
     }
@@ -51,6 +59,13 @@ export default function Schedules() {
         <input placeholder="Schedule name (optional)" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
         <button type="submit" style={btnStyle}>New Schedule</button>
       </form>
+
+      {error && (
+        <div style={errorStyle}>
+          <strong>Schedule generation failed:</strong> {error}
+          <button onClick={() => setError(null)} style={{ marginLeft: "1rem", background: "none", border: "none", cursor: "pointer", fontWeight: "bold" }}>✕</button>
+        </div>
+      )}
 
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
@@ -95,6 +110,16 @@ export default function Schedules() {
   );
 }
 
+const errorStyle: React.CSSProperties = {
+  padding: "0.75rem 1rem",
+  marginBottom: "1rem",
+  background: "#fef2f2",
+  border: "1px solid #fca5a5",
+  borderRadius: 6,
+  color: "#991b1b",
+  display: "flex",
+  alignItems: "center",
+};
 const inputStyle: React.CSSProperties = { padding: "0.4rem 0.6rem", border: "1px solid #ccc", borderRadius: 4 };
 const btnStyle: React.CSSProperties = { padding: "0.4rem 1rem", background: "#2563eb", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" };
 const thStyle: React.CSSProperties = { textAlign: "left", padding: "0.5rem", borderBottom: "2px solid #e0e0e0" };

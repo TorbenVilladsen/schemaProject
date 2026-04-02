@@ -9,6 +9,7 @@ class TimeslotBase(BaseModel):
     start_time: time
     end_time: time
     label: str | None = None
+    period_type: str = "module"
 
 
 class TimeslotCreate(TimeslotBase):

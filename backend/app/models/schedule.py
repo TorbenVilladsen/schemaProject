@@ -37,9 +37,10 @@ class ScheduleEntry(Base):
     schedule_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("schedules.id", ondelete="CASCADE"), index=True)
     teacher_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("teachers.id"))
     subject_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("subjects.id"))
-    room_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rooms.id"))
+    room_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rooms.id"))
     day_of_week: Mapped[int] = mapped_column(Integer)  # 0=Monday .. 4=Friday
     timeslot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("timeslots.id"))
+    class_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("school_classes.id"))
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
 
     schedule: Mapped["Schedule"] = relationship(back_populates="entries")

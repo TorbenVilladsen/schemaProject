@@ -1,15 +1,21 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getSubjects, createSubject, deleteSubject } from "../api/client";
+import { getSubjects, createSubject, deleteSubject, getClasses, getRooms } from "../api/client";
 
 export default function Subjects() {
   const queryClient = useQueryClient();
   const { data: subjects, isLoading } = useQuery({ queryKey: ["subjects"], queryFn: getSubjects });
+  const { data: classes } = useQuery({ queryKey: ["classes"], queryFn: getClasses });
+  const { data: rooms } = useQuery({ queryKey: ["rooms"], queryFn: getRooms });
+
+  // Unique room types from existing rooms
+  const roomTypes = [...new Set(rooms?.map((r) => r.room_type) ?? [])];
 
   const [name, setName] = useState("");
   const [gradeLevel, setGradeLevel] = useState(1);
   const [hoursPerWeek, setHoursPerWeek] = useState(3);
   const [roomType, setRoomType] = useState("");
+  const [classId, setClassId] = useState("");
 
   const createMut = useMutation({
     mutationFn: createSubject,
@@ -31,6 +37,7 @@ export default function Subjects() {
       grade_level: gradeLevel,
       hours_per_week: hoursPerWeek,
       requires_room_type: roomType || undefined,
+      class_id: classId || undefined,
     });
   };
 
@@ -43,7 +50,18 @@ export default function Subjects() {
         <input placeholder="Name (e.g. Math)" value={name} onChange={(e) => setName(e.target.value)} required style={inputStyle} />
         <input type="number" placeholder="Grade" value={gradeLevel} onChange={(e) => setGradeLevel(+e.target.value)} style={{ ...inputStyle, width: 80 }} />
         <input type="number" placeholder="Hrs/week" value={hoursPerWeek} onChange={(e) => setHoursPerWeek(+e.target.value)} style={{ ...inputStyle, width: 80 }} />
-        <input placeholder="Room type (optional)" value={roomType} onChange={(e) => setRoomType(e.target.value)} style={inputStyle} />
+        <select value={roomType} onChange={(e) => setRoomType(e.target.value)} style={inputStyle}>
+          <option value="">Room type (optional)</option>
+          {roomTypes.map((type) => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </select>
+        <select value={classId} onChange={(e) => setClassId(e.target.value)} style={inputStyle}>
+          <option value="">Class (optional)</option>
+          {classes?.map((c) => (
+            <option key={c.id} value={c.id}>{c.name} (Grade {c.grade_level})</option>
+          ))}
+        </select>
         <button type="submit" style={btnStyle}>Add Subject</button>
       </form>
 
@@ -54,6 +72,7 @@ export default function Subjects() {
             <th style={thStyle}>Grade</th>
             <th style={thStyle}>Hours/Week</th>
             <th style={thStyle}>Room Type</th>
+            <th style={thStyle}>Class</th>
             <th style={thStyle}>Actions</th>
           </tr>
         </thead>
@@ -64,6 +83,7 @@ export default function Subjects() {
               <td style={tdStyle}>{s.grade_level}</td>
               <td style={tdStyle}>{s.hours_per_week}</td>
               <td style={tdStyle}>{s.requires_room_type || "Any"}</td>
+              <td style={tdStyle}>{classes?.find((c) => c.id === s.class_id)?.name || "-"}</td>
               <td style={tdStyle}>
                 <button onClick={() => deleteMut.mutate(s.id)} style={{ ...btnStyle, background: "#ef4444" }}>Delete</button>
               </td>

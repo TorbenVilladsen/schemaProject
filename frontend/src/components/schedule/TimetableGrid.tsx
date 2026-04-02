@@ -14,10 +14,9 @@ interface Props {
   subjects: Subject[];
   rooms: Room[];
   timeslots: Timeslot[];
-  filterTeacherId?: string;
 }
 
-export default function TimetableGrid({ entries, teachers, subjects, rooms, timeslots, filterTeacherId }: Props) {
+export default function TimetableGrid({ entries, teachers, subjects, rooms, timeslots }: Props) {
   const teacherMap = Object.fromEntries(teachers.map((t) => [t.id, t]));
   const subjectMap = Object.fromEntries(subjects.map((s) => [s.id, s]));
   const roomMap = Object.fromEntries(rooms.map((r) => [r.id, r]));
@@ -25,12 +24,8 @@ export default function TimetableGrid({ entries, teachers, subjects, rooms, time
 
   const sortedSlots = [...timeslots].sort((a, b) => a.slot_index - b.slot_index);
 
-  const filtered = filterTeacherId
-    ? entries.filter((e) => e.teacher_id === filterTeacherId)
-    : entries;
-
   const getEntry = (day: number, slotId: string) =>
-    filtered.filter((e) => e.day_of_week === day && e.timeslot_id === slotId);
+    entries.filter((e) => e.day_of_week === day && e.timeslot_id === slotId);
 
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
@@ -57,7 +52,7 @@ export default function TimetableGrid({ entries, teachers, subjects, rooms, time
                   {cellEntries.map((entry) => {
                     const subject = subjectMap[entry.subject_id];
                     const teacher = teacherMap[entry.teacher_id];
-                    const room = roomMap[entry.room_id];
+                    const room = entry.room_id ? roomMap[entry.room_id] : undefined;
                     return (
                       <div
                         key={entry.id}

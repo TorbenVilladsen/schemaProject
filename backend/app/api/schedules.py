@@ -62,7 +62,7 @@ def trigger_generate(
         raise HTTPException(404, "Schedule not found")
     result = generate_schedule(db, schedule, tenant)
     if result["status"] == "infeasible":
-        raise HTTPException(400, "No feasible schedule found. Check constraints and data.")
+        raise HTTPException(400, result.get("detail", "No feasible schedule found. Check constraints and data."))
     db.refresh(schedule)
     return (
         db.query(Schedule)

@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getTeachers, createTeacher, deleteTeacher } from "../api/client";
+import { getTeachers, createTeacher, deleteTeacher, getSubjects } from "../api/client";
 
 export default function Teachers() {
   const queryClient = useQueryClient();
   const { data: teachers, isLoading } = useQuery({ queryKey: ["teachers"], queryFn: getTeachers });
+  const { data: subjects } = useQuery({ queryKey: ["subjects"], queryFn: getSubjects });
+
+  // Unique subject names from existing subjects
+  const subjectNames = [...new Set(subjects?.map((s) => s.name) ?? [])];
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -43,7 +47,12 @@ export default function Teachers() {
       <form onSubmit={handleCreate} style={{ marginBottom: "1.5rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
         <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required style={inputStyle} />
         <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
-        <input placeholder="Qualified subject" value={qualSubject} onChange={(e) => setQualSubject(e.target.value)} style={inputStyle} />
+        <select value={qualSubject} onChange={(e) => setQualSubject(e.target.value)} style={inputStyle}>
+          <option value="">Qualified subject (optional)</option>
+          {subjectNames.map((name) => (
+            <option key={name} value={name}>{name}</option>
+          ))}
+        </select>
         <input type="number" placeholder="Min grade" value={qualMinGrade} onChange={(e) => setQualMinGrade(+e.target.value)} style={{ ...inputStyle, width: 80 }} />
         <input type="number" placeholder="Max grade" value={qualMaxGrade} onChange={(e) => setQualMaxGrade(+e.target.value)} style={{ ...inputStyle, width: 80 }} />
         <button type="submit" style={btnStyle}>Add Teacher</button>

@@ -15,6 +15,7 @@ class ScheduleEntryRead(BaseModel):
     room_id: uuid.UUID
     day_of_week: int
     timeslot_id: uuid.UUID
+    class_id: uuid.UUID | None = None
     is_locked: bool = False
 
     model_config = {"from_attributes": True}

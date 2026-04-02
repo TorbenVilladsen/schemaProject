@@ -8,6 +8,7 @@ class SubjectBase(BaseModel):
     grade_level: int
     hours_per_week: int
     requires_room_type: str | None = None
+    class_id: uuid.UUID | None = None
 
 
 class SubjectCreate(SubjectBase):
@@ -19,6 +20,7 @@ class SubjectUpdate(BaseModel):
     grade_level: int | None = None
     hours_per_week: int | None = None
     requires_room_type: str | None = None
+    class_id: uuid.UUID | None = None
 
 
 class SubjectRead(SubjectBase):
