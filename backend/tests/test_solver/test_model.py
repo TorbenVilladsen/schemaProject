@@ -268,3 +268,28 @@ def test_class_id_propagated():
     assert result.status in ("optimal", "feasible")
     assert len(result.entries) == 1
     assert result.entries[0]["class_id"] == class_id
+
+
+def test_laesebaand_timeslot_is_not_used_for_assignments():
+    """Subjects must not be placed in the Læsebånd period."""
+    subject = SubjectData(id=_make_id(), name="Math", grade_level=3, hours_per_week=1, requires_room_type=None)
+    laesebaand_slot = TimeslotData(id=_make_id(), slot_index=0, label="Læsebånd")
+    module_slot = TimeslotData(id=_make_id(), slot_index=1, label="1. modul")
+    room = RoomData(id=_make_id(), name="Room A", capacity=30, room_type="classroom")
+    teacher = TeacherData(
+        id=_make_id(), name="Alice", max_hours_week=20, max_hours_day=6,
+        qualified_subjects={subject.id: (0, 9)},
+    )
+
+    data = SolverInput(
+        teachers=[teacher],
+        subjects=[subject],
+        rooms=[room],
+        timeslots=[laesebaand_slot, module_slot],
+        days=[0],
+    )
+
+    result = build_model(data, time_limit_seconds=5)
+    assert result.status in ("optimal", "feasible")
+    assert len(result.entries) == 1
+    assert result.entries[0]["timeslot_id"] == module_slot.id

@@ -12,7 +12,7 @@ class ScheduleEntryRead(BaseModel):
     id: uuid.UUID
     teacher_id: uuid.UUID
     subject_id: uuid.UUID
-    room_id: uuid.UUID
+    room_id: uuid.UUID | None = None
     day_of_week: int
     timeslot_id: uuid.UUID
     class_id: uuid.UUID | None = None
@@ -33,6 +33,11 @@ class ScheduleRead(BaseModel):
     entries: list[ScheduleEntryRead] = []
 
     model_config = {"from_attributes": True}
+
+
+class ScheduleEntryMove(BaseModel):
+    day_of_week: int
+    timeslot_id: uuid.UUID
 
 
 class ScheduleListRead(BaseModel):

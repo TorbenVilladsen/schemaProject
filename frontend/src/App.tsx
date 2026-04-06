@@ -50,9 +50,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <WarmupQueries />
       <BrowserRouter>
-        <div style={{ display: "flex" }}>
+        <div className="app-layout">
           <Sidebar />
-          <main style={{ flex: 1, padding: "1.5rem" }}>
+          <main className="app-main">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/classes" element={<Classes />} />

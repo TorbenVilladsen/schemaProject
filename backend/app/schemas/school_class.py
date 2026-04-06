@@ -1,12 +1,13 @@
 import uuid
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SchoolClassBase(BaseModel):
-    name: str
-    grade_level: int
+    name: str = Field(min_length=1, max_length=50)
+    grade_level: int = Field(ge=0, le=13)
     contact_teacher_id: uuid.UUID | None = None
+    primary_room_id: uuid.UUID | None = None
 
 
 class SchoolClassCreate(SchoolClassBase):
@@ -14,9 +15,10 @@ class SchoolClassCreate(SchoolClassBase):
 
 
 class SchoolClassUpdate(BaseModel):
-    name: str | None = None
-    grade_level: int | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=50)
+    grade_level: int | None = Field(default=None, ge=0, le=13)
     contact_teacher_id: uuid.UUID | None = None
+    primary_room_id: uuid.UUID | None = None
 
 
 class SchoolClassRead(SchoolClassBase):

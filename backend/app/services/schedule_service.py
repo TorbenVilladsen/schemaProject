@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
 from app.models.tenant import Tenant
@@ -20,6 +20,7 @@ from app.solver.model import (
     TimeslotData,
     ClassData,
     build_model,
+    is_blocked_timeslot,
 )
 
 
@@ -29,7 +30,12 @@ def generate_schedule(db: Session, schedule: Schedule, tenant: Tenant) -> dict:
     db.commit()
 
     # Load all data for this tenant
-    teachers = db.query(Teacher).filter(Teacher.tenant_id == tenant.id).all()
+    teachers = (
+        db.query(Teacher)
+        .options(selectinload(Teacher.qualifications), selectinload(Teacher.availability))
+        .filter(Teacher.tenant_id == tenant.id)
+        .all()
+    )
     subjects = db.query(Subject).filter(Subject.tenant_id == tenant.id).all()
     rooms = db.query(Room).filter(Room.tenant_id == tenant.id).all()
     timeslots = db.query(Timeslot).filter(Timeslot.tenant_id == tenant.id).order_by(Timeslot.slot_index).all()
@@ -57,8 +63,6 @@ def generate_schedule(db: Session, schedule: Schedule, tenant: Tenant) -> dict:
     # Build solver input
     teacher_data = []
     for t in teachers:
-        qualifications = db.query(TeacherQualification).filter(TeacherQualification.teacher_id == t.id).all()
-        availability_records = db.query(TeacherAvailability).filter(TeacherAvailability.teacher_id == t.id).all()
         td = TeacherData(
             id=t.id,
             name=t.name,
@@ -66,12 +70,12 @@ def generate_schedule(db: Session, schedule: Schedule, tenant: Tenant) -> dict:
             max_hours_day=t.max_hours_day,
         )
         # Map subject_name qualifications to actual subject IDs
-        for q in qualifications:
+        for q in t.qualifications:
             for s in subjects:
                 if s.name == q.subject_name:
                     td.qualified_subjects[s.id] = (q.min_grade, q.max_grade)
         # Map availability records to (day, period_idx) -> is_available
-        for av in availability_records:
+        for av in t.availability:
             p_idx = timeslot_index.get(av.timeslot_id)
             if p_idx is not None:
                 td.availability[(av.day_of_week, p_idx)] = av.is_available
@@ -105,7 +109,7 @@ def generate_schedule(db: Session, schedule: Schedule, tenant: Tenant) -> dict:
     ]
 
     timeslot_data = [
-        TimeslotData(id=ts.id, slot_index=ts.slot_index)
+        TimeslotData(id=ts.id, slot_index=ts.slot_index, label=ts.label, period_type=ts.period_type)
         for ts in timeslots
     ]
 
@@ -136,10 +140,17 @@ def generate_schedule(db: Session, schedule: Schedule, tenant: Tenant) -> dict:
                 )
 
     total_hours = sum(s.hours_per_week for s in subjects)
-    total_slots = len(timeslots) * 5  # 5 days
+    schedulable_slots_per_day = sum(
+        1 for ts in timeslots if not is_blocked_timeslot(ts.label, ts.period_type)
+    )
+    total_slots = schedulable_slots_per_day * 5  # 5 days
+    if schedulable_slots_per_day == 0 and total_hours > 0:
+        diagnostics.append(
+            "No schedulable periods configured. Læsebånd periods are blocked from automatic scheduling."
+        )
     if total_hours > total_slots:
         diagnostics.append(
-            f"Total hours needed ({total_hours}) exceeds available slots ({total_slots} = {len(timeslots)} periods × 5 days)"
+            f"Total hours needed ({total_hours}) exceeds available slots ({total_slots} = {schedulable_slots_per_day} schedulable periods × 5 days)"
         )
 
     # Run solver

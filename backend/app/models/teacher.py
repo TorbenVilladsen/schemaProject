@@ -12,7 +12,6 @@ class Teacher(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     name: Mapped[str] = mapped_column(String(255))
-    email: Mapped[str | None] = mapped_column(String(255))
     max_hours_week: Mapped[int] = mapped_column(Integer, default=25)
     max_hours_day: Mapped[int] = mapped_column(Integer, default=6)
 

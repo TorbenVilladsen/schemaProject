@@ -42,6 +42,7 @@ def export_setup(
                 "name": c.name,
                 "grade_level": c.grade_level,
                 "contact_teacher_id": c.contact_teacher_id,
+                "primary_room_id": c.primary_room_id,
             }
             for c in classes
         ],
@@ -49,7 +50,6 @@ def export_setup(
             {
                 "id": t.id,
                 "name": t.name,
-                "email": t.email,
                 "max_hours_week": t.max_hours_week,
                 "max_hours_day": t.max_hours_day,
                 "qualifications": [
@@ -116,109 +116,119 @@ def import_setup(
         if s.class_id and s.class_id not in class_ids:
             raise HTTPException(400, f"Subject '{s.name}' references unknown class id: {s.class_id}")
 
-    if payload.replace_existing:
-        db.query(Substitution).filter(Substitution.tenant_id == tenant.id).delete(synchronize_session=False)
-        db.query(ScheduleEntry).filter(
-            ScheduleEntry.schedule_id.in_(
-                db.query(Schedule.id).filter(Schedule.tenant_id == tenant.id)
-            )
-        ).delete(synchronize_session=False)
-        db.query(Schedule).filter(Schedule.tenant_id == tenant.id).delete(synchronize_session=False)
+    try:
+        if payload.replace_existing:
+            db.query(Substitution).filter(Substitution.tenant_id == tenant.id).delete(synchronize_session=False)
+            db.query(ScheduleEntry).filter(
+                ScheduleEntry.schedule_id.in_(
+                    db.query(Schedule.id).filter(Schedule.tenant_id == tenant.id)
+                )
+            ).delete(synchronize_session=False)
+            db.query(Schedule).filter(Schedule.tenant_id == tenant.id).delete(synchronize_session=False)
 
-        db.query(Subject).filter(Subject.tenant_id == tenant.id).delete(synchronize_session=False)
-        db.query(TeacherAvailability).filter(
-            TeacherAvailability.teacher_id.in_(
-                db.query(Teacher.id).filter(Teacher.tenant_id == tenant.id)
-            )
-        ).delete(synchronize_session=False)
-        db.query(TeacherQualification).filter(
-            TeacherQualification.teacher_id.in_(
-                db.query(Teacher.id).filter(Teacher.tenant_id == tenant.id)
-            )
-        ).delete(synchronize_session=False)
-        db.query(SchoolClass).filter(SchoolClass.tenant_id == tenant.id).delete(synchronize_session=False)
-        db.query(Teacher).filter(Teacher.tenant_id == tenant.id).delete(synchronize_session=False)
-        db.query(Room).filter(Room.tenant_id == tenant.id).delete(synchronize_session=False)
-        db.query(Timeslot).filter(Timeslot.tenant_id == tenant.id).delete(synchronize_session=False)
-        db.flush()
+            db.query(Subject).filter(Subject.tenant_id == tenant.id).delete(synchronize_session=False)
+            db.query(TeacherAvailability).filter(
+                TeacherAvailability.teacher_id.in_(
+                    db.query(Teacher.id).filter(Teacher.tenant_id == tenant.id)
+                )
+            ).delete(synchronize_session=False)
+            db.query(TeacherQualification).filter(
+                TeacherQualification.teacher_id.in_(
+                    db.query(Teacher.id).filter(Teacher.tenant_id == tenant.id)
+                )
+            ).delete(synchronize_session=False)
+            db.query(SchoolClass).filter(SchoolClass.tenant_id == tenant.id).delete(synchronize_session=False)
+            db.query(Teacher).filter(Teacher.tenant_id == tenant.id).delete(synchronize_session=False)
+            db.query(Room).filter(Room.tenant_id == tenant.id).delete(synchronize_session=False)
+            db.query(Timeslot).filter(Timeslot.tenant_id == tenant.id).delete(synchronize_session=False)
+            db.flush()
 
-    teacher_id_map: dict[uuid.UUID, uuid.UUID] = {}
-    class_id_map: dict[uuid.UUID, uuid.UUID] = {}
+        teacher_id_map: dict[uuid.UUID, uuid.UUID] = {}
+        class_id_map: dict[uuid.UUID, uuid.UUID] = {}
+        room_id_map: dict[uuid.UUID, uuid.UUID] = {}
 
-    for t in data.teachers:
-        new_id = t.id or uuid.uuid4()
-        teacher = Teacher(
-            id=new_id,
-            tenant_id=tenant.id,
-            name=t.name,
-            email=t.email,
-            max_hours_week=t.max_hours_week,
-            max_hours_day=t.max_hours_day,
-        )
-        db.add(teacher)
-        for q in t.qualifications:
+        for r in data.rooms:
+            new_id = r.id or uuid.uuid4()
             db.add(
-                TeacherQualification(
-                    teacher_id=new_id,
-                    subject_name=q.subject_name,
-                    min_grade=q.min_grade,
-                    max_grade=q.max_grade,
+                Room(
+                    id=new_id,
+                    tenant_id=tenant.id,
+                    name=r.name,
+                    capacity=r.capacity,
+                    room_type=r.room_type,
                 )
             )
-        if t.id:
-            teacher_id_map[t.id] = new_id
+            if r.id:
+                room_id_map[r.id] = new_id
 
-    for c in data.classes:
-        new_id = c.id or uuid.uuid4()
-        class_obj = SchoolClass(
-            id=new_id,
-            tenant_id=tenant.id,
-            name=c.name,
-            grade_level=c.grade_level,
-            contact_teacher_id=teacher_id_map.get(c.contact_teacher_id, c.contact_teacher_id),
-        )
-        db.add(class_obj)
-        if c.id:
-            class_id_map[c.id] = new_id
-
-    for s in data.subjects:
-        db.add(
-            Subject(
-                id=s.id or uuid.uuid4(),
+        for t in data.teachers:
+            new_id = t.id or uuid.uuid4()
+            teacher = Teacher(
+                id=new_id,
                 tenant_id=tenant.id,
-                name=s.name,
-                grade_level=s.grade_level,
-                hours_per_week=s.hours_per_week,
-                requires_room_type=s.requires_room_type,
-                class_id=class_id_map.get(s.class_id, s.class_id),
+                name=t.name,
+                max_hours_week=t.max_hours_week,
+                max_hours_day=t.max_hours_day,
             )
-        )
+            db.add(teacher)
+            for q in t.qualifications:
+                db.add(
+                    TeacherQualification(
+                        teacher_id=new_id,
+                        subject_name=q.subject_name,
+                        min_grade=q.min_grade,
+                        max_grade=q.max_grade,
+                    )
+                )
+            if t.id:
+                teacher_id_map[t.id] = new_id
 
-    for r in data.rooms:
-        db.add(
-            Room(
-                id=r.id or uuid.uuid4(),
+        for c in data.classes:
+            new_id = c.id or uuid.uuid4()
+            class_obj = SchoolClass(
+                id=new_id,
                 tenant_id=tenant.id,
-                name=r.name,
-                capacity=r.capacity,
-                room_type=r.room_type,
+                name=c.name,
+                grade_level=c.grade_level,
+                contact_teacher_id=teacher_id_map.get(c.contact_teacher_id, c.contact_teacher_id),
+                primary_room_id=room_id_map.get(c.primary_room_id, c.primary_room_id),
             )
-        )
+            db.add(class_obj)
+            if c.id:
+                class_id_map[c.id] = new_id
 
-    for ts in data.timeslots:
-        db.add(
-            Timeslot(
-                id=ts.id or uuid.uuid4(),
-                tenant_id=tenant.id,
-                slot_index=ts.slot_index,
-                start_time=ts.start_time,
-                end_time=ts.end_time,
-                label=ts.label,
-                period_type=ts.period_type,
+        for s in data.subjects:
+            db.add(
+                Subject(
+                    id=s.id or uuid.uuid4(),
+                    tenant_id=tenant.id,
+                    name=s.name,
+                    grade_level=s.grade_level,
+                    hours_per_week=s.hours_per_week,
+                    requires_room_type=s.requires_room_type,
+                    class_id=class_id_map.get(s.class_id, s.class_id),
+                )
             )
-        )
 
-    db.commit()
+        for ts in data.timeslots:
+            db.add(
+                Timeslot(
+                    id=ts.id or uuid.uuid4(),
+                    tenant_id=tenant.id,
+                    slot_index=ts.slot_index,
+                    start_time=ts.start_time,
+                    end_time=ts.end_time,
+                    label=ts.label,
+                    period_type=ts.period_type,
+                )
+            )
+
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, "Import failed — all changes have been rolled back.")
 
     return SetupImportResponse(
         replace_existing=payload.replace_existing,

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getTimeslots, createTimeslot } from "../api/client";
+import { formatTime } from "../styles/shared";
 
 export default function Timeslots() {
   const queryClient = useQueryClient();
@@ -10,7 +11,6 @@ export default function Timeslots() {
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("08:45");
   const [label, setLabel] = useState("");
-  const [periodType, setPeriodType] = useState("module");
 
   const createMut = useMutation({
     mutationFn: createTimeslot,
@@ -25,61 +25,79 @@ export default function Timeslots() {
     e.preventDefault();
     createMut.mutate({
       slot_index: slotIndex,
-      start_time: startTime + ":00",
-      end_time: endTime + ":00",
+      start_time: startTime,
+      end_time: endTime,
       label: label || undefined,
-      period_type: periodType,
     });
   };
 
-  if (isLoading) return <p>Loading...</p>;
+  if (isLoading) return <p className="loading-text">Loading timeslots...</p>;
 
   return (
     <div>
-      <h1>Timeslots</h1>
-      <p style={{ color: "#666", marginBottom: "1rem" }}>
-        Define the periods in a school day. These are shared across all weekdays (Mon-Fri).
-      </p>
+      <div className="page-header">
+        <h1>Timeslots</h1>
+        <p>Define the periods in a school day. These are shared across all weekdays (Mon-Fri) and used by the scheduler.</p>
+      </div>
 
-      <form onSubmit={handleCreate} style={{ marginBottom: "1.5rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-        <input type="number" placeholder="Period #" value={slotIndex} onChange={(e) => setSlotIndex(+e.target.value)} min={0} style={{ ...inputStyle, width: 80 }} />
-        <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required style={inputStyle} />
-        <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required style={inputStyle} />
-        <input placeholder="Label (e.g. 1. modul)" value={label} onChange={(e) => setLabel(e.target.value)} style={inputStyle} />
-        <select value={periodType} onChange={(e) => setPeriodType(e.target.value)} style={inputStyle}>
-          <option value="module">Module</option>
-          <option value="reading">Reading</option>
-        </select>
-        <button type="submit" style={btnStyle}>Add Timeslot</button>
+      <form onSubmit={handleCreate} className="form-card">
+        <div className="field-row">
+          <div className="field-group" style={{ maxWidth: 100 }}>
+            <label className="form-label">Period # <span className="required">*</span></label>
+            <input className="form-input" type="number" value={slotIndex} onChange={(e) => setSlotIndex(+e.target.value)} min={0} />
+            <span className="form-hint">Order (0 = first)</span>
+          </div>
+          <div className="field-group">
+            <label className="form-label">Start time <span className="required">*</span></label>
+            <input className="form-input" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+            <span className="form-hint">When this period begins</span>
+          </div>
+          <div className="field-group">
+            <label className="form-label">End time <span className="required">*</span></label>
+            <input className="form-input" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+            <span className="form-hint">When this period ends</span>
+          </div>
+        </div>
+
+        <div className="field-row" style={{ alignItems: "flex-end" }}>
+          <div className="field-group">
+            <label className="form-label">Label</label>
+            <input className="form-input" placeholder="e.g. 1. modul" value={label} onChange={(e) => setLabel(e.target.value)} />
+            <span className="form-hint">Optional display name shown in the timetable</span>
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn btn-primary">Add Timeslot</button>
+          </div>
+        </div>
       </form>
 
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={thStyle}>Period #</th>
-            <th style={thStyle}>Start</th>
-            <th style={thStyle}>End</th>
-            <th style={thStyle}>Label</th>
-            <th style={thStyle}>Type</th>
-          </tr>
-        </thead>
-        <tbody>
-          {timeslots?.map((ts) => (
-            <tr key={ts.id}>
-              <td style={tdStyle}>{ts.slot_index}</td>
-              <td style={tdStyle}>{ts.start_time}</td>
-              <td style={tdStyle}>{ts.end_time}</td>
-              <td style={tdStyle}>{ts.label || "—"}</td>
-              <td style={tdStyle}>{ts.period_type}</td>
+      {timeslots && timeslots.length > 0 ? (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Period #</th>
+              <th>Start</th>
+              <th>End</th>
+              <th>Label</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {timeslots.map((ts) => (
+              <tr key={ts.id}>
+                <td>{ts.slot_index}</td>
+                <td>{formatTime(ts.start_time)}</td>
+                <td>{formatTime(ts.end_time)}</td>
+                <td>{ts.label || "\u2014"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="empty-state">
+          <p><strong>No timeslots yet</strong></p>
+          <p>Add your first timeslot above to define the school day periods.</p>
+        </div>
+      )}
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = { padding: "0.4rem 0.6rem", border: "1px solid #ccc", borderRadius: 4 };
-const btnStyle: React.CSSProperties = { padding: "0.4rem 1rem", background: "#2563eb", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" };
-const thStyle: React.CSSProperties = { textAlign: "left", padding: "0.5rem", borderBottom: "2px solid #e0e0e0" };
-const tdStyle: React.CSSProperties = { padding: "0.5rem", borderBottom: "1px solid #eee" };

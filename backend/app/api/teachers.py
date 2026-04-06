@@ -1,12 +1,12 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db
 from app.api.deps import get_tenant
 from app.models.tenant import Tenant
-from app.models.teacher import Teacher, TeacherQualification
+from app.models.teacher import Teacher, TeacherQualification, TeacherAvailability
 from app.schemas.teacher import TeacherCreate, TeacherRead, TeacherUpdate
 
 router = APIRouter()
@@ -19,7 +19,7 @@ def list_teachers(
 ):
     return (
         db.query(Teacher)
-        .options(joinedload(Teacher.qualifications))
+        .options(selectinload(Teacher.qualifications), selectinload(Teacher.availability))
         .filter(Teacher.tenant_id == tenant.id)
         .all()
     )
@@ -34,7 +34,6 @@ def create_teacher(
     teacher = Teacher(
         tenant_id=tenant.id,
         name=data.name,
-        email=data.email,
         max_hours_week=data.max_hours_week,
         max_hours_day=data.max_hours_day,
     )
@@ -44,6 +43,15 @@ def create_teacher(
                 subject_name=q.subject_name,
                 min_grade=q.min_grade,
                 max_grade=q.max_grade,
+            )
+        )
+    for a in data.availability:
+        teacher.availability.append(
+            TeacherAvailability(
+                day_of_week=a.day_of_week,
+                timeslot_id=a.timeslot_id,
+                is_available=a.is_available,
+                preference=a.preference,
             )
         )
     db.add(teacher)
@@ -60,7 +68,7 @@ def get_teacher(
 ):
     teacher = (
         db.query(Teacher)
-        .options(joinedload(Teacher.qualifications))
+        .options(selectinload(Teacher.qualifications), selectinload(Teacher.availability))
         .filter(Teacher.id == teacher_id, Teacher.tenant_id == tenant.id)
         .first()
     )
@@ -76,11 +84,33 @@ def update_teacher(
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_tenant),
 ):
-    teacher = db.query(Teacher).filter(Teacher.id == teacher_id, Teacher.tenant_id == tenant.id).first()
+    teacher = (
+        db.query(Teacher)
+        .options(selectinload(Teacher.availability))
+        .filter(Teacher.id == teacher_id, Teacher.tenant_id == tenant.id)
+        .first()
+    )
     if not teacher:
         raise HTTPException(404, "Teacher not found")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    payload = data.model_dump(exclude_unset=True)
+    availability = payload.pop("availability", None)
+    for field, value in payload.items():
         setattr(teacher, field, value)
+    if availability is not None:
+        db.query(TeacherAvailability).filter(TeacherAvailability.teacher_id == teacher.id).delete(
+            synchronize_session=False
+        )
+        db.flush()
+        for a in availability:
+            db.add(
+                TeacherAvailability(
+                    teacher_id=teacher.id,
+                    day_of_week=a["day_of_week"],
+                    timeslot_id=a["timeslot_id"],
+                    is_available=a.get("is_available", True),
+                    preference=a.get("preference", 0),
+                ),
+            )
     db.commit()
     db.refresh(teacher)
     return teacher

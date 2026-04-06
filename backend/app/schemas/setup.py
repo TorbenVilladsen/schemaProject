@@ -1,50 +1,54 @@
 import uuid
 from datetime import time
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 from app.schemas.teacher import QualificationCreate
 
 
 class SetupTeacher(BaseModel):
     id: uuid.UUID | None = None
-    name: str
-    email: str | None = None
-    max_hours_week: int = 25
-    max_hours_day: int = 6
+    name: str = Field(min_length=1, max_length=255)
+    max_hours_week: int = Field(default=25, ge=1, le=60)
+    max_hours_day: int = Field(default=6, ge=1, le=12)
     qualifications: list[QualificationCreate] = Field(default_factory=list)
 
 
 class SetupClass(BaseModel):
     id: uuid.UUID | None = None
-    name: str
-    grade_level: int
+    name: str = Field(min_length=1, max_length=50)
+    grade_level: int = Field(ge=0, le=13)
     contact_teacher_id: uuid.UUID | None = None
+    primary_room_id: uuid.UUID | None = None
 
 
 class SetupSubject(BaseModel):
     id: uuid.UUID | None = None
-    name: str
-    grade_level: int
-    hours_per_week: int
-    requires_room_type: str | None = None
+    name: str = Field(min_length=1, max_length=100)
+    grade_level: int = Field(ge=0, le=13)
+    hours_per_week: int = Field(ge=1, le=40)
+    requires_room_type: str | None = Field(default=None, max_length=50)
     class_id: uuid.UUID | None = None
 
 
 class SetupRoom(BaseModel):
     id: uuid.UUID | None = None
-    name: str
-    capacity: int
-    room_type: str = "classroom"
+    name: str = Field(min_length=1, max_length=100)
+    capacity: int = Field(ge=1, le=1000)
+    room_type: str = Field(default="classroom", min_length=1, max_length=50)
 
 
 class SetupTimeslot(BaseModel):
     id: uuid.UUID | None = None
-    slot_index: int
+    slot_index: int = Field(ge=0, le=20)
     start_time: time
     end_time: time
-    label: str | None = None
-    period_type: str = "module"
+    label: str | None = Field(default=None, max_length=50)
+    period_type: str = Field(default="module", max_length=20)
+
+    @field_serializer("start_time", "end_time")
+    def serialize_time(self, value: time) -> str:
+        return value.strftime("%H:%M")
 
 
 class SetupData(BaseModel):

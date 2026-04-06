@@ -17,3 +17,4 @@ class SchoolClass(Base):
     name: Mapped[str] = mapped_column(String(50))  # e.g. "3A", "7B"
     grade_level: Mapped[int] = mapped_column(Integer)  # 0-9
     contact_teacher_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("teachers.id"))
+    primary_room_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rooms.id"))

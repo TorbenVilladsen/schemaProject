@@ -71,18 +71,21 @@ export default function Setup() {
 
   return (
     <div>
-      <h1>Setup Import/Export</h1>
-      <p>
-        Export your current classes, teachers, subjects, rooms, and timeslots as JSON, or import
-        a JSON file to quickly set up a new environment.
-      </p>
-      <p style={{ color: "#b45309" }}>
-        Import replaces existing setup data and clears existing schedules.
-      </p>
+      <div className="page-header">
+        <h1>Import / Export</h1>
+        <p>
+          Export your current classes, teachers, subjects, rooms, and timeslots as JSON, or import
+          a JSON file to quickly set up a new environment.
+        </p>
+      </div>
+
+      <div className="alert alert-warning" style={{ marginBottom: "1.25rem" }}>
+        Import replaces all existing setup data and clears existing schedules.
+      </div>
 
       <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem" }}>
-        <button onClick={handleExport} style={btnStyle}>Export Setup JSON</button>
-        <label style={btnSecondaryStyle}>
+        <button onClick={handleExport} className="btn btn-primary">Export Setup JSON</button>
+        <label className="btn btn-secondary" style={{ cursor: "pointer" }}>
           Choose JSON File
           <input
             type="file"
@@ -98,44 +101,17 @@ export default function Setup() {
         onChange={(e) => setJsonText(e.target.value)}
         placeholder="Paste setup JSON here..."
         rows={20}
-        style={textAreaStyle}
+        className="form-textarea"
       />
 
       <div style={{ marginTop: "0.75rem" }}>
-        <button onClick={handleImport} disabled={importMut.isPending} style={btnStyle}>
+        <button onClick={handleImport} disabled={importMut.isPending} className="btn btn-primary">
           {importMut.isPending ? "Importing..." : "Import Setup"}
         </button>
       </div>
 
-      {message && <p style={{ color: "#166534", marginTop: "0.75rem" }}>{message}</p>}
-      {error && <p style={{ color: "#b91c1c", marginTop: "0.75rem" }}>{error}</p>}
+      {message && <div className="alert alert-success" style={{ marginTop: "0.75rem" }}>{message}</div>}
+      {error && <div className="alert alert-error" style={{ marginTop: "0.75rem" }}>{error}</div>}
     </div>
   );
 }
-
-const btnStyle: React.CSSProperties = {
-  padding: "0.45rem 1rem",
-  background: "#2563eb",
-  color: "#fff",
-  border: "none",
-  borderRadius: 4,
-  cursor: "pointer",
-};
-
-const btnSecondaryStyle: React.CSSProperties = {
-  padding: "0.45rem 1rem",
-  background: "#4b5563",
-  color: "#fff",
-  border: "none",
-  borderRadius: 4,
-  cursor: "pointer",
-  display: "inline-block",
-};
-
-const textAreaStyle: React.CSSProperties = {
-  width: "100%",
-  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-  border: "1px solid #d1d5db",
-  borderRadius: 6,
-  padding: "0.75rem",
-};

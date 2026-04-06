@@ -2,10 +2,10 @@ export interface Teacher {
   id: string;
   tenant_id: string;
   name: string;
-  email: string | null;
   max_hours_week: number;
   max_hours_day: number;
   qualifications: Qualification[];
+  availability: TeacherAvailability[];
 }
 
 export interface Qualification {
@@ -13,6 +13,14 @@ export interface Qualification {
   subject_name: string;
   min_grade: number;
   max_grade: number;
+}
+
+export interface TeacherAvailability {
+  id: string;
+  day_of_week: number;
+  timeslot_id: string;
+  is_available: boolean;
+  preference: number;
 }
 
 export interface Subject {
@@ -31,6 +39,14 @@ export interface SchoolClass {
   name: string;
   grade_level: number;
   contact_teacher_id: string | null;
+  primary_room_id: string | null;
+}
+
+export interface RoomAvailability {
+  id: string;
+  day_of_week: number;
+  timeslot_id: string;
+  is_available: boolean;
 }
 
 export interface Room {
@@ -39,6 +55,10 @@ export interface Room {
   name: string;
   capacity: number;
   room_type: string;
+  grid_row: number | null;
+  grid_col: number | null;
+  grid_pane: string | null;
+  availability: RoomAvailability[];
 }
 
 export interface Timeslot {
@@ -86,7 +106,6 @@ export interface ScheduleListItem {
 export interface SetupTeacher {
   id?: string;
   name: string;
-  email: string | null;
   max_hours_week: number;
   max_hours_day: number;
   qualifications: {
@@ -101,6 +120,7 @@ export interface SetupClass {
   name: string;
   grade_level: number;
   contact_teacher_id: string | null;
+  primary_room_id: string | null;
 }
 
 export interface SetupSubject {

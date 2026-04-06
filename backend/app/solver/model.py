@@ -48,6 +48,8 @@ class RoomData:
 class TimeslotData:
     id: uuid.UUID
     slot_index: int
+    label: str | None = None
+    period_type: str = "module"  # "reading" or "module"
 
 
 @dataclass
@@ -71,6 +73,10 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
     """Build and solve the CP-SAT model for schedule generation."""
     model = cp_model.CpModel()
     total_required_hours = sum(subject.hours_per_week for subject in data.subjects)
+    schedulable_periods = [
+        p_idx for p_idx, ts in enumerate(data.timeslots)
+        if not is_blocked_timeslot(ts.label, ts.period_type)
+    ]
 
     # Pre-compute which teachers can teach which subjects
     # A teacher can teach a subject if they have a qualification matching the subject's grade
@@ -97,7 +103,7 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
     for t_idx, s_idx in teacher_subject_pairs:
         teacher = data.teachers[t_idx]
         for d in data.days:
-            for p_idx in range(len(data.timeslots)):
+            for p_idx in schedulable_periods:
                 if not teacher.availability.get((d, p_idx), True):
                     continue  # teacher unavailable — no variable
                 var_name = f"x_t{t_idx}_s{s_idx}_d{d}_p{p_idx}"
@@ -107,7 +113,7 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
     r: dict[tuple[int, int, int, int], cp_model.IntVar] = {}
     for s_idx in range(len(data.subjects)):
         for d in data.days:
-            for p_idx in range(len(data.timeslots)):
+            for p_idx in schedulable_periods:
                 for r_idx in subject_rooms.get(s_idx, []):
                     var_name = f"r_s{s_idx}_d{d}_p{p_idx}_r{r_idx}"
                     r[s_idx, d, p_idx, r_idx] = model.new_bool_var(var_name)
@@ -117,7 +123,7 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
     # 1. Teacher teaches at most one subject per (day, period)
     for t_idx in range(len(data.teachers)):
         for d in data.days:
-            for p_idx in range(len(data.timeslots)):
+            for p_idx in schedulable_periods:
                 vars_for_slot = [
                     x[t_idx, s_idx, d, p_idx]
                     for s_idx in range(len(data.subjects))
@@ -132,7 +138,7 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
             x[t_idx, s_idx, d, p_idx]
             for t_idx in range(len(data.teachers))
             for d in data.days
-            for p_idx in range(len(data.timeslots))
+            for p_idx in schedulable_periods
             if (t_idx, s_idx, d, p_idx) in x
         ]
         if all_assignments:
@@ -144,7 +150,7 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
     # 3. Each subject is taught at most once per (day, period) — one teacher per class
     for s_idx in range(len(data.subjects)):
         for d in data.days:
-            for p_idx in range(len(data.timeslots)):
+            for p_idx in schedulable_periods:
                 vars_for_slot = [
                     x[t_idx, s_idx, d, p_idx]
                     for t_idx in range(len(data.teachers))
@@ -153,10 +159,32 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
                 if vars_for_slot:
                     model.add(sum(vars_for_slot) <= 1)
 
-    # 4. Room no-clash: at most one subject per room per (day, period)
+    # 4. One subject per class per period
+    # Group subjects by class_id; when class_id is None, group by grade_level instead
+    class_subjects: dict[str, list[int]] = {}  # key -> list of subject_idx
+    for s_idx, subject in enumerate(data.subjects):
+        if subject.class_id is not None:
+            key = f"class:{subject.class_id}"
+        else:
+            key = f"grade:{subject.grade_level}"
+        class_subjects.setdefault(key, []).append(s_idx)
+
+    for key, s_indices in class_subjects.items():
+        for d in data.days:
+            for p_idx in schedulable_periods:
+                vars_for_slot = [
+                    x[t_idx, s_idx, d, p_idx]
+                    for s_idx in s_indices
+                    for t_idx in range(len(data.teachers))
+                    if (t_idx, s_idx, d, p_idx) in x
+                ]
+                if vars_for_slot:
+                    model.add(sum(vars_for_slot) <= 1)
+
+    # 5. Room no-clash: at most one subject per room per (day, period)
     for r_idx in range(len(data.rooms)):
         for d in data.days:
-            for p_idx in range(len(data.timeslots)):
+            for p_idx in schedulable_periods:
                 vars_for_room = [
                     r[s_idx, d, p_idx, r_idx]
                     for s_idx in range(len(data.subjects))
@@ -165,10 +193,10 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
                 if vars_for_room:
                     model.add(sum(vars_for_room) <= 1)
 
-    # 5. Link teaching to room: if a subject is taught in a slot, it must have exactly one room
+    # 6. Link teaching to room: if a subject is taught in a slot, it must have exactly one room
     for s_idx in range(len(data.subjects)):
         for d in data.days:
-            for p_idx in range(len(data.timeslots)):
+            for p_idx in schedulable_periods:
                 teaching_vars = [
                     x[t_idx, s_idx, d, p_idx]
                     for t_idx in range(len(data.teachers))
@@ -183,31 +211,31 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
                     # sum of rooms == sum of teachers (0 or 1)
                     model.add(sum(room_vars) == sum(teaching_vars))
 
-    # 6. Teacher max hours per day
+    # 7. Teacher max hours per day
     for t_idx, teacher in enumerate(data.teachers):
         for d in data.days:
             day_vars = [
                 x[t_idx, s_idx, d, p_idx]
                 for s_idx in range(len(data.subjects))
-                for p_idx in range(len(data.timeslots))
+                for p_idx in schedulable_periods
                 if (t_idx, s_idx, d, p_idx) in x
             ]
             if day_vars:
                 model.add(sum(day_vars) <= teacher.max_hours_day)
 
-    # 7. Teacher max hours per week
+    # 8. Teacher max hours per week
     for t_idx, teacher in enumerate(data.teachers):
         week_vars = [
             x[t_idx, s_idx, d, p_idx]
             for s_idx in range(len(data.subjects))
             for d in data.days
-            for p_idx in range(len(data.timeslots))
+            for p_idx in schedulable_periods
             if (t_idx, s_idx, d, p_idx) in x
         ]
         if week_vars:
             model.add(sum(week_vars) <= teacher.max_hours_week)
 
-    # 8. Balance load across weekdays.
+    # 9. Balance load across weekdays.
     # Without an objective, CP-SAT may cluster assignments on just a few days.
     day_load_vars: list[cp_model.IntVar] = []
     for d in data.days:
@@ -215,7 +243,7 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
             x[t_idx, s_idx, d, p_idx]
             for t_idx in range(len(data.teachers))
             for s_idx in range(len(data.subjects))
-            for p_idx in range(len(data.timeslots))
+            for p_idx in schedulable_periods
             if (t_idx, s_idx, d, p_idx) in x
         ]
         day_load = model.new_int_var(0, total_required_hours, f"day_load_d{d}")
@@ -272,3 +300,14 @@ def build_model(data: SolverInput, time_limit_seconds: int = 30) -> SolverResult
             entries=[],
             stats={"wall_time": solver.wall_time},
         )
+
+
+def is_blocked_timeslot(label: str | None, period_type: str) -> bool:
+    """Block non-teaching periods such as Læsebånd from subject placement."""
+    raw_label = (label or "").lower()
+    ascii_like = raw_label.replace("æ", "ae")
+    return (
+        period_type.lower() == "reading"
+        or "læseb" in raw_label
+        or "laeseb" in ascii_like
+    )

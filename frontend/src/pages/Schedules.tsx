@@ -46,81 +46,89 @@ export default function Schedules() {
     }
   };
 
-  if (isLoading) return <p>Loading...</p>;
+  const statusBadge = (status: string | null) => {
+    if (!status) return <span className="badge badge-neutral">pending</span>;
+    if (status === "optimal" || status === "feasible") return <span className="badge badge-success">{status}</span>;
+    if (status === "infeasible") return <span className="badge badge-danger">{status}</span>;
+    if (status === "running") return <span className="badge badge-warning">{status}</span>;
+    return <span className="badge badge-neutral">{status}</span>;
+  };
+
+  if (isLoading) return <p className="loading-text">Loading schedules...</p>;
 
   return (
     <div>
-      <h1>Schedules</h1>
+      <div className="page-header">
+        <h1>Schedules</h1>
+        <p>Create and generate timetable schedules using the constraint solver.</p>
+      </div>
 
       <form
         onSubmit={(e) => { e.preventDefault(); createMut.mutate(name || undefined); }}
-        style={{ marginBottom: "1.5rem", display: "flex", gap: "0.5rem" }}
+        className="form-card"
       >
-        <input placeholder="Schedule name (optional)" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
-        <button type="submit" style={btnStyle}>New Schedule</button>
+        <div className="field-row" style={{ alignItems: "flex-end" }}>
+          <div className="field-group">
+            <label className="form-label">Schedule name</label>
+            <input className="form-input" placeholder="e.g. Spring 2026 Timetable" value={name} onChange={(e) => setName(e.target.value)} />
+            <span className="form-hint">Optional name to identify this schedule</span>
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn btn-primary">New Schedule</button>
+          </div>
+        </div>
       </form>
 
       {error && (
-        <div style={errorStyle}>
-          <strong>Schedule generation failed:</strong> {error}
-          <button onClick={() => setError(null)} style={{ marginLeft: "1rem", background: "none", border: "none", cursor: "pointer", fontWeight: "bold" }}>✕</button>
+        <div className="alert alert-error">
+          <strong>Generation failed:</strong>&nbsp;{error}
+          <button onClick={() => setError(null)} className="alert-dismiss">&times;</button>
         </div>
       )}
 
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={thStyle}>Name</th>
-            <th style={thStyle}>Status</th>
-            <th style={thStyle}>Solver</th>
-            <th style={thStyle}>Created</th>
-            <th style={thStyle}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {schedules?.map((s) => (
-            <tr key={s.id}>
-              <td style={tdStyle}>{s.name || "Untitled"}</td>
-              <td style={tdStyle}>{s.status}</td>
-              <td style={tdStyle}>{s.solver_status || "—"}</td>
-              <td style={tdStyle}>{new Date(s.created_at).toLocaleDateString()}</td>
-              <td style={tdStyle}>
-                <button
-                  onClick={() => handleGenerate(s.id)}
-                  disabled={generating === s.id}
-                  style={{ ...btnStyle, marginRight: "0.5rem" }}
-                >
-                  {generating === s.id ? "Generating..." : "Generate"}
-                </button>
-                <button
-                  onClick={() => navigate(`/schedules/${s.id}`)}
-                  style={{ ...btnStyle, background: "#6b7280", marginRight: "0.5rem" }}
-                >
-                  View
-                </button>
-                <button onClick={() => deleteMut.mutate(s.id)} style={{ ...btnStyle, background: "#ef4444" }}>
-                  Delete
-                </button>
-              </td>
+      {schedules && schedules.length > 0 ? (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Solver</th>
+              <th>Created</th>
+              <th style={{ width: 260 }}>Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {schedules.map((s) => (
+              <tr key={s.id}>
+                <td>{s.name || "Untitled"}</td>
+                <td><span className="badge badge-neutral">{s.status}</span></td>
+                <td>{statusBadge(s.solver_status)}</td>
+                <td>{new Date(s.created_at).toLocaleDateString()}</td>
+                <td className="actions-cell">
+                  <button
+                    onClick={() => handleGenerate(s.id)}
+                    disabled={generating === s.id}
+                    className="btn btn-primary btn-sm"
+                  >
+                    {generating === s.id ? "Generating..." : "Generate"}
+                  </button>
+                  <button onClick={() => navigate(`/schedules/${s.id}`)} className="btn btn-secondary btn-sm">
+                    View
+                  </button>
+                  <button onClick={() => deleteMut.mutate(s.id)} className="btn btn-danger btn-sm">
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="empty-state">
+          <p><strong>No schedules yet</strong></p>
+          <p>Create a schedule above to get started with timetable generation.</p>
+        </div>
+      )}
     </div>
   );
 }
-
-const errorStyle: React.CSSProperties = {
-  padding: "0.75rem 1rem",
-  marginBottom: "1rem",
-  background: "#fef2f2",
-  border: "1px solid #fca5a5",
-  borderRadius: 6,
-  color: "#991b1b",
-  display: "flex",
-  alignItems: "center",
-};
-const inputStyle: React.CSSProperties = { padding: "0.4rem 0.6rem", border: "1px solid #ccc", borderRadius: 4 };
-const btnStyle: React.CSSProperties = { padding: "0.4rem 1rem", background: "#2563eb", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" };
-const thStyle: React.CSSProperties = { textAlign: "left", padding: "0.5rem", borderBottom: "2px solid #e0e0e0" };
-const tdStyle: React.CSSProperties = { padding: "0.5rem", borderBottom: "1px solid #eee" };
